@@ -31,11 +31,15 @@ tracer.Color = Color3.new(1,0,0)
 tracer.Thickness = 1
 
 local scrapESP = {}
+local flareESP = {}
+local supplyESP = {}
 local configValues = {}
 
 local sprintEnabled = false
 local espEnabled = false
 local scrapEnabled = false
+local flareEnabled = false
+local supplyEnabled = false
 local lightEnabled = false
 local camUnlocked = false
 local zoomLock = 15
@@ -49,10 +53,15 @@ local textSize = 15
 local autoPickup = false
 local pickupRange = 10
 
+local scrapColor = Color3.new(1,1,1)
+local scrapSize = 14
 local scrapThick = 1
-local scrapTextSize = 15
-local showScrapDist = true
-local showScrapLevel = true
+local flareColor = Color3.new(1,0.5,0)
+local flareSize = 16
+local flareThick = 2
+local supplyColor = Color3.new(0,1,1)
+local supplySize = 16
+local supplyThick = 2
 
 local scrapColors = {
     [1] = Color3.new(0.5,0.5,0.5),
@@ -76,10 +85,12 @@ local Window = Rayfield:CreateWindow({
 })
 
 local MainTab = Window:CreateTab("Main", 4483362458)
-local ESPTab = Window:CreateTab("ESP Settings", 4483362458)
-local ScrapTab = Window:CreateTab("Scrap Settings", 4483362458)
+local SettingsTab = Window:CreateTab("Settings", 4483362458)
 local InfoTab = Window:CreateTab("Info", 4483362458)
 local ConfigTab = Window:CreateTab("Config", 4483362458)
+local ExperimentalTab = Window:CreateTab("Experimental", 4483362458)
+
+local ESPSection = MainTab:CreateSection("ESP")
 
 local ESPToggle = MainTab:CreateToggle({
    Name = "Rake ESP",
@@ -108,13 +119,54 @@ local ScrapToggle = MainTab:CreateToggle({
    end,
 })
 
+local FlareToggle = MainTab:CreateToggle({
+   Name = "Flare Gun ESP",
+   CurrentValue = false,
+   Flag = "flareesp",
+   Callback = function(v)
+      flareEnabled = v
+      configValues.flareesp = v
+      if not v and flareESP.box then
+         flareESP.box.Visible = false
+         flareESP.text.Visible = false
+         flareESP.dist.Visible = false
+      end
+   end,
+})
+
+local SupplyToggle = MainTab:CreateToggle({
+   Name = "Supply Box ESP",
+   CurrentValue = false,
+   Flag = "supplyesp",
+   Callback = function(v)
+      supplyEnabled = v
+      configValues.supplyesp = v
+      if not v then
+         for _,esp in pairs(supplyESP) do
+            esp.box.Visible = false
+            esp.text.Visible = false
+            esp.dist.Visible = false
+         end
+      end
+   end,
+})
+
+local VisualsSection = MainTab:CreateSection("VISUALS")
+
 local LightToggle = MainTab:CreateToggle({
-   Name = "Fullbright",
+   Name = "Fullbright + No Effects",
    CurrentValue = false,
    Flag = "light",
    Callback = function(v)
       lightEnabled = v
       configValues.light = v
+      if v then
+         for _,effect in pairs(game.Lighting:GetChildren()) do
+            if effect:IsA("BlurEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("SunRaysEffect") or effect:IsA("BloomEffect") or effect:IsA("ColorCorrectionEffect") then
+               effect.Enabled = false
+            end
+         end
+      end
    end,
 })
 
@@ -154,6 +206,8 @@ local ZoomSlider = MainTab:CreateSlider({
    end,
 })
 
+local CharacterSection = MainTab:CreateSection("CHARACTER")
+
 local SprintToggle = MainTab:CreateToggle({
    Name = "Infinite Sprint",
    CurrentValue = false,
@@ -165,7 +219,7 @@ local SprintToggle = MainTab:CreateToggle({
 })
 
 local AutoPickupToggle = MainTab:CreateToggle({
-   Name = "Extended Scrap Pickup",
+   Name = "Auto Pickup Scrap",
    CurrentValue = false,
    Flag = "autopickup",
    Callback = function(v)
@@ -176,8 +230,8 @@ local AutoPickupToggle = MainTab:CreateToggle({
 
 local PickupRangeSlider = MainTab:CreateSlider({
    Name = "Pickup Range",
-   Range = {5, 15},
-   Increment = 1,
+   Range = {5, 50},
+   Increment = 5,
    Suffix = "m",
    CurrentValue = 10,
    Flag = "pickuprange",
@@ -187,8 +241,10 @@ local PickupRangeSlider = MainTab:CreateSlider({
    end,
 })
 
-local ColorPicker = ESPTab:CreateColorPicker({
-   Name = "ESP Color",
+local RakeSection = SettingsTab:CreateSection("RAKE")
+
+local ColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Rake Color",
    Color = Color3.fromRGB(255, 0, 0),
    Flag = "espcolor",
    Callback = function(v)
@@ -200,7 +256,7 @@ local ColorPicker = ESPTab:CreateColorPicker({
    end
 })
 
-local ThickSlider = ESPTab:CreateSlider({
+local ThickSlider = SettingsTab:CreateSlider({
    Name = "Box Thickness",
    Range = {1, 5},
    Increment = 1,
@@ -214,7 +270,7 @@ local ThickSlider = ESPTab:CreateSlider({
    end,
 })
 
-local TextSlider = ESPTab:CreateSlider({
+local TextSlider = SettingsTab:CreateSlider({
    Name = "Text Size",
    Range = {10, 30},
    Increment = 2,
@@ -229,7 +285,7 @@ local TextSlider = ESPTab:CreateSlider({
    end,
 })
 
-local NameToggle = ESPTab:CreateToggle({
+local NameToggle = SettingsTab:CreateToggle({
    Name = "Show Name",
    CurrentValue = true,
    Flag = "showname",
@@ -239,7 +295,7 @@ local NameToggle = ESPTab:CreateToggle({
    end,
 })
 
-local DistToggle = ESPTab:CreateToggle({
+local DistToggle = SettingsTab:CreateToggle({
    Name = "Show Distance",
    CurrentValue = true,
    Flag = "showdist",
@@ -249,7 +305,7 @@ local DistToggle = ESPTab:CreateToggle({
    end,
 })
 
-local TracerToggle = ESPTab:CreateToggle({
+local TracerToggle = SettingsTab:CreateToggle({
    Name = "Show Tracer",
    CurrentValue = false,
    Flag = "tracer",
@@ -259,8 +315,42 @@ local TracerToggle = ESPTab:CreateToggle({
    end,
 })
 
-local ScrapThickSlider = ScrapTab:CreateSlider({
-   Name = "Box Thickness",
+local ScrapSection = SettingsTab:CreateSection("SCRAP")
+
+local ScrapColorToggle = SettingsTab:CreateToggle({
+   Name = "Use Rarity Colors",
+   CurrentValue = true,
+   Flag = "scrapraritycolor",
+   Callback = function(v)
+      configValues.scrapraritycolor = v
+   end,
+})
+
+local ScrapColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Scrap Color (If not rarity)",
+   Color = Color3.fromRGB(255, 255, 255),
+   Flag = "scrapcolor",
+   Callback = function(v)
+      scrapColor = v
+      configValues.scrapcolor = {v.R * 255, v.G * 255, v.B * 255}
+   end
+})
+
+local ScrapSizeSlider = SettingsTab:CreateSlider({
+   Name = "Scrap Text Size",
+   Range = {10, 20},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 14,
+   Flag = "scrapsize",
+   Callback = function(v)
+      scrapSize = v
+      configValues.scrapsize = v
+   end,
+})
+
+local ScrapThickSlider = SettingsTab:CreateSlider({
+   Name = "Scrap Box Thickness",
    Range = {1, 5},
    Increment = 1,
    Suffix = "px",
@@ -272,41 +362,90 @@ local ScrapThickSlider = ScrapTab:CreateSlider({
    end,
 })
 
-local ScrapTextSlider = ScrapTab:CreateSlider({
-   Name = "Text Size",
-   Range = {10, 20},
+local FlareSection = SettingsTab:CreateSection("FLARE GUN")
+
+local FlareColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Flare Color",
+   Color = Color3.fromRGB(255, 128, 0),
+   Flag = "flarecolor",
+   Callback = function(v)
+      flareColor = v
+      configValues.flarecolor = {v.R * 255, v.G * 255, v.B * 255}
+      flareESP.box.Color = v
+      flareESP.text.Color = v
+   end
+})
+
+local FlareSizeSlider = SettingsTab:CreateSlider({
+   Name = "Flare Text Size",
+   Range = {10, 25},
    Increment = 1,
    Suffix = "px",
-   CurrentValue = 15,
-   Flag = "scraptextsize",
+   CurrentValue = 16,
+   Flag = "flaresize",
    Callback = function(v)
-      scrapTextSize = v
-      configValues.scraptextsize = v
+      flareSize = v
+      configValues.flaresize = v
+      flareESP.text.Size = v
    end,
 })
 
-local ScrapDistToggle = ScrapTab:CreateToggle({
-   Name = "Show Distance",
-   CurrentValue = true,
-   Flag = "showscrapdist",
+local FlareThickSlider = SettingsTab:CreateSlider({
+   Name = "Flare Box Thickness",
+   Range = {1, 5},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 2,
+   Flag = "flarethick",
    Callback = function(v)
-      showScrapDist = v
-      configValues.showscrapdist = v
+      flareThick = v
+      configValues.flarethick = v
+      flareESP.box.Thickness = v
    end,
 })
 
-local ScrapLevelToggle = ScrapTab:CreateToggle({
-   Name = "Show Level",
-   CurrentValue = true,
-   Flag = "showscraplevel",
+local SupplySection = SettingsTab:CreateSection("SUPPLY BOX")
+
+local SupplyColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Supply Color",
+   Color = Color3.fromRGB(0, 255, 255),
+   Flag = "supplycolor",
    Callback = function(v)
-      showScrapLevel = v
-      configValues.showscraplevel = v
+      supplyColor = v
+      configValues.supplycolor = {v.R * 255, v.G * 255, v.B * 255}
+   end
+})
+
+local SupplySizeSlider = SettingsTab:CreateSlider({
+   Name = "Supply Text Size",
+   Range = {10, 25},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 16,
+   Flag = "supplysize",
+   Callback = function(v)
+      supplySize = v
+      configValues.supplysize = v
    end,
 })
 
+local SupplyThickSlider = SettingsTab:CreateSlider({
+   Name = "Supply Box Thickness",
+   Range = {1, 5},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 2,
+   Flag = "supplythick",
+   Callback = function(v)
+      supplyThick = v
+      configValues.supplythick = v
+   end,
+})
+
+-- Config Tab
 local configFolder = "RakeConfigs"
 local configs = {}
+local autoLoadConfig = nil
 
 local function refreshConfigs()
     configs = {}
@@ -323,6 +462,11 @@ end
 
 if not isfolder(configFolder) then
     makefolder(configFolder)
+end
+
+-- check for autoload
+if isfile(configFolder.."/autoload.txt") then
+    autoLoadConfig = readfile(configFolder.."/autoload.txt")
 end
 
 local selectedConfig = "default"
@@ -364,25 +508,39 @@ local LoadButton = ConfigTab:CreateButton({
             
             ESPToggle:Set(data.esp or false)
             ScrapToggle:Set(data.scrapesp or false)
+            FlareToggle:Set(data.flareesp or false)
+            SupplyToggle:Set(data.supplyesp or false)
             LightToggle:Set(data.light or false)
             SprintToggle:Set(data.sprint or false)
             CamToggle:Set(data.cam or false)
+            AutoPickupToggle:Set(data.autopickup or false)
             BrightSlider:Set(data.bright or 1)
             ZoomSlider:Set(data.zoom or 15)
+            PickupRangeSlider:Set(data.pickuprange or 10)
             ThickSlider:Set(data.thick or 1)
             TextSlider:Set(data.textsize or 15)
             NameToggle:Set(data.showname ~= false)
             DistToggle:Set(data.showdist ~= false)
             TracerToggle:Set(data.tracer or false)
+            ScrapColorToggle:Set(data.scrapraritycolor ~= false)
+            ScrapSizeSlider:Set(data.scrapsize or 14)
             ScrapThickSlider:Set(data.scrapthick or 1)
-            ScrapTextSlider:Set(data.scraptextsize or 15)
-            ScrapDistToggle:Set(data.showscrapdist ~= false)
-            ScrapLevelToggle:Set(data.showscraplevel ~= false)
-            AutoPickupToggle:Set(data.autopickup or false)
-            PickupRangeSlider:Set(data.pickuprange or 10)
+            FlareSizeSlider:Set(data.flaresize or 16)
+            FlareThickSlider:Set(data.flarethick or 2)
+            SupplySizeSlider:Set(data.supplysize or 16)
+            SupplyThickSlider:Set(data.supplythick or 2)
             
             if data.espcolor then
                 ColorPicker:Set(Color3.fromRGB(data.espcolor[1], data.espcolor[2], data.espcolor[3]))
+            end
+            if data.scrapcolor then
+                ScrapColorPicker:Set(Color3.fromRGB(data.scrapcolor[1], data.scrapcolor[2], data.scrapcolor[3]))
+            end
+            if data.flarecolor then
+                FlareColorPicker:Set(Color3.fromRGB(data.flarecolor[1], data.flarecolor[2], data.flarecolor[3]))
+            end
+            if data.supplycolor then
+                SupplyColorPicker:Set(Color3.fromRGB(data.supplycolor[1], data.supplycolor[2], data.supplycolor[3]))
             end
         end
     end,
@@ -406,6 +564,24 @@ local RefreshButton = ConfigTab:CreateButton({
     end,
 })
 
+local AutoLoadButton = ConfigTab:CreateButton({
+    Name = "Set as Auto-Load",
+    Callback = function()
+        writefile(configFolder.."/autoload.txt", selectedConfig)
+        autoLoadConfig = selectedConfig
+    end,
+})
+
+local ClearAutoLoadButton = ConfigTab:CreateButton({
+    Name = "Clear Auto-Load",
+    Callback = function()
+        if isfile(configFolder.."/autoload.txt") then
+            delfile(configFolder.."/autoload.txt")
+            autoLoadConfig = nil
+        end
+    end,
+})
+
 local CreditLabel = InfoTab:CreateLabel("made by t.me/rakeshittnes")
 local TimerLabel = InfoTab:CreateLabel("Time: 0:00")
 local PowerLabel = InfoTab:CreateLabel("Power: 0%")
@@ -413,16 +589,7 @@ local DoorLabel = InfoTab:CreateLabel("SafeHouse Door: OFF")
 local SHLightLabel = InfoTab:CreateLabel("SafeHouse Light: OFF")
 local TowerLabel = InfoTab:CreateLabel("Tower Light: OFF")
 
-local NoBlurButton = InfoTab:CreateButton({
-   Name = "Remove All Effects",
-   Callback = function()
-      for _,v in pairs(game.Lighting:GetChildren()) do
-         if v:IsA("BlurEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("SunRaysEffect") or v:IsA("BloomEffect") or v:IsA("ColorCorrectionEffect") then
-            v.Enabled = false
-         end
-      end
-   end,
-})
+local ExperimentalLabel = ExperimentalTab:CreateLabel("Testing Features!")
 
 local function createScrapESP(model)
     if scrapESP[model] then return end
@@ -448,32 +615,62 @@ local function createScrapESP(model)
     scrapESP[model] = esp
 end
 
-rs.RenderStepped:Connect(function()
-if autoPickup and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
-    local filter = workspace:FindFirstChild("Filter")
-    if filter then
-        local spawns = filter:FindFirstChild("ScrapSpawns")
-        if spawns then
-            for _,itemSpawn in pairs(spawns:GetChildren()) do
-                if itemSpawn.Name:match("ItemSpawn") then
-                    for _,scrapFolder in pairs(itemSpawn:GetChildren()) do
-                        if scrapFolder.Name:match("Scrap%d") then
-                            local scrapPart = scrapFolder:FindFirstChild("Scrap")
-                            if scrapPart and scrapPart:FindFirstChild("TouchInterest") then
-                                local dist = (plr.Character.HumanoidRootPart.Position - scrapPart.Position).Magnitude
-                                if dist <= pickupRange then
-                                    firetouchinterest(plr.Character.HumanoidRootPart, scrapPart, 0)
-                                    firetouchinterest(plr.Character.HumanoidRootPart, scrapPart, 1)
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
+local function createSupplyESP(model)
+    if supplyESP[model] then return end
+    
+    local esp = {}
+    esp.box = draw("Square")
+    esp.box.Thickness = supplyThick
+    esp.box.Filled = false
+    esp.box.Visible = false
+    esp.box.Color = supplyColor
+    
+    esp.text = draw("Text")
+    esp.text.Size = supplySize
+    esp.text.Center = true
+    esp.text.Outline = true
+    esp.text.Visible = false
+    esp.text.Color = supplyColor
+    esp.text.Text = "SUPPLY BOX"
+    
+    esp.dist = draw("Text")
+    esp.dist.Size = 14
+    esp.dist.Center = true
+    esp.dist.Outline = true
+    esp.dist.Visible = false
+    esp.dist.Color = Color3.new(1,1,1)
+    
+    supplyESP[model] = esp
 end
 
+flareESP.box = draw("Square")
+flareESP.box.Thickness = 2
+flareESP.box.Filled = false
+flareESP.box.Visible = false
+flareESP.box.Color = Color3.new(1,0.5,0)
+
+flareESP.text = draw("Text")
+flareESP.text.Size = 16
+flareESP.text.Center = true
+flareESP.text.Outline = true
+flareESP.text.Visible = false
+flareESP.text.Color = Color3.new(1,0.5,0)
+flareESP.text.Text = "FLARE GUN"
+
+flareESP.dist = draw("Text")
+flareESP.dist.Size = 14
+flareESP.dist.Center = true
+flareESP.dist.Outline = true
+flareESP.dist.Visible = false
+flareESP.dist.Color = Color3.new(1,1,1)
+
+if autoLoadConfig and isfile(configFolder.."/"..autoLoadConfig..".json") then
+    task.wait(0.5)
+    selectedConfig = autoLoadConfig
+    LoadButton.Callback()
+end
+
+rs.RenderStepped:Connect(function()
     if lightEnabled then
         local l = game.Lighting
         l.Brightness = brightness
@@ -491,6 +688,31 @@ end
     
     if sprintEnabled and plr.Character and plr.Character:FindFirstChild("Humanoid") then
         plr.Character.Humanoid.WalkSpeed = 25
+    end
+    
+    if autoPickup and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+        local filter = workspace:FindFirstChild("Filter")
+        if filter then
+            local spawns = filter:FindFirstChild("ScrapSpawns")
+            if spawns then
+                for _,itemSpawn in pairs(spawns:GetChildren()) do
+                    if itemSpawn.Name:match("ItemSpawn") then
+                        for _,scrapFolder in pairs(itemSpawn:GetChildren()) do
+                            if scrapFolder.Name:match("Scrap%d") then
+                                local scrapPart = scrapFolder:FindFirstChild("Scrap")
+                                if scrapPart and scrapPart:FindFirstChild("TouchInterest") then
+                                    local dist = (plr.Character.HumanoidRootPart.Position - scrapPart.Position).Magnitude
+                                    if dist <= pickupRange then
+                                        firetouchinterest(plr.Character.HumanoidRootPart, scrapPart, 0)
+                                        firetouchinterest(plr.Character.HumanoidRootPart, scrapPart, 1)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
     end
     
     local timer = repStorage:FindFirstChild("Timer")
@@ -541,30 +763,26 @@ end
                                             local level = scrapFolder:FindFirstChild("LevelVal")
                                             local points = scrapFolder:FindFirstChild("PointsVal")
                                             
-                                            if level then
+                                            if configValues.scrapraritycolor ~= false and level then
                                                 esp.box.Color = scrapColors[level.Value] or Color3.new(1,1,1)
                                             else
-                                                esp.box.Color = Color3.new(1,1,1)
+                                                esp.box.Color = scrapColor
                                             end
                                             
                                             local textY = pos.Y + size/2 + 5
-                                            local levelText = showScrapLevel and level and "Lvl "..level.Value or ""
+                                            local levelText = level and "Lvl "..level.Value or ""
                                             local pointText = points and points.Value.."pts" or "???"
                                             
                                             esp.text.Position = Vector2.new(pos.X, textY)
                                             esp.text.Text = levelText..(levelText ~= "" and " | " or "")..pointText
                                             esp.text.Color = esp.box.Color
-                                            esp.text.Size = scrapTextSize
+                                            esp.text.Size = scrapSize
                                             
-                                            if showScrapDist then
-                                                esp.dist.Position = Vector2.new(pos.X, textY + scrapTextSize + 2)
-                                                esp.dist.Text = math.floor((plr.Character.HumanoidRootPart.Position - scrapPart.Position).Magnitude).."m"
-                                                esp.dist.Color = Color3.new(1,1,1)
-                                                esp.dist.Size = scrapTextSize - 2
-                                                esp.dist.Visible = true
-                                            else
-                                                esp.dist.Visible = false
-                                            end
+                                            esp.dist.Position = Vector2.new(pos.X, textY + scrapSize + 2)
+                                            esp.dist.Text = math.floor((plr.Character.HumanoidRootPart.Position - scrapPart.Position).Magnitude).."m"
+                                            esp.dist.Color = Color3.new(1,1,1)
+                                            esp.dist.Size = scrapSize - 2
+                                            esp.dist.Visible = true
                                             
                                             esp.box.Visible = true
                                             esp.text.Visible = true
@@ -575,6 +793,82 @@ end
                                         end
                                     end
                                 end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if flareEnabled then
+        local flarePickup = workspace:FindFirstChild("FlareGunPickUp")
+        if flarePickup then
+            local flareGun = flarePickup:FindFirstChild("FlareGun")
+            if flareGun and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local pos, vis = cam:WorldToViewportPoint(flareGun.Position)
+                if vis then
+                    local size = 1800 / pos.Z
+                    flareESP.box.Size = Vector2.new(size, size)
+                    flareESP.box.Position = Vector2.new(pos.X - size/2, pos.Y - size/2)
+                    flareESP.box.Visible = true
+                    flareESP.box.Thickness = flareThick
+                    flareESP.box.Color = flareColor
+                    
+                    flareESP.text.Position = Vector2.new(pos.X, pos.Y + size/2 + 5)
+                    flareESP.text.Visible = true
+                    flareESP.text.Size = flareSize
+                    flareESP.text.Color = flareColor
+                    
+                    flareESP.dist.Position = Vector2.new(pos.X, pos.Y + size/2 + 5 + flareSize + 2)
+                    flareESP.dist.Text = math.floor((plr.Character.HumanoidRootPart.Position - flareGun.Position).Magnitude).."m"
+                    flareESP.dist.Visible = true
+                else
+                    flareESP.box.Visible = false
+                    flareESP.text.Visible = false
+                    flareESP.dist.Visible = false
+                end
+            else
+                flareESP.box.Visible = false
+                flareESP.text.Visible = false
+                flareESP.dist.Visible = false
+            end
+        end
+    end
+
+    if supplyEnabled then
+        local debris = workspace:FindFirstChild("Debris")
+        if debris then
+            local crates = debris:FindFirstChild("SupplyCrates")
+            if crates then
+                for _,crate in pairs(crates:GetChildren()) do
+                    if crate:IsA("Model") then
+                        createSupplyESP(crate)
+                        local esp = supplyESP[crate]
+                        
+                        if plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                            local cf = crate:GetBoundingBox()
+                            local pos, vis = cam:WorldToViewportPoint(cf.Position)
+                            if vis then
+                                local size = 2500 / pos.Z
+                                esp.box.Size = Vector2.new(size, size)
+                                esp.box.Position = Vector2.new(pos.X - size/2, pos.Y - size/2)
+                                esp.box.Thickness = supplyThick
+                                esp.box.Color = supplyColor
+                                esp.box.Visible = true
+                                
+                                esp.text.Position = Vector2.new(pos.X, pos.Y + size/2 + 5)
+                                esp.text.Size = supplySize
+                                esp.text.Color = supplyColor
+                                esp.text.Visible = true
+                                
+                                esp.dist.Position = Vector2.new(pos.X, pos.Y + size/2 + 5 + supplySize + 2)
+                                esp.dist.Text = math.floor((plr.Character.HumanoidRootPart.Position - cf.Position).Magnitude).."m"
+                                esp.dist.Visible = true
+                            else
+                                esp.box.Visible = false
+                                esp.text.Visible = false
+                                esp.dist.Visible = false
                             end
                         end
                     end
@@ -633,5 +927,11 @@ workspace.DescendantRemoving:Connect(function(obj)
         scrapESP[obj].text:Remove()
         scrapESP[obj].dist:Remove()
         scrapESP[obj] = nil
+    end
+    if supplyESP[obj] then
+        supplyESP[obj].box:Remove()
+        supplyESP[obj].text:Remove()
+        supplyESP[obj].dist:Remove()
+        supplyESP[obj] = nil
     end
 end)
