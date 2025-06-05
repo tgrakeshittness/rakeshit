@@ -34,6 +34,8 @@ local scrapESP = {}
 local flareESP = {}
 local supplyESP = {}
 local configValues = {}
+local screenInfoEnabled = false
+local screenInfos = {}
 
 local sprintEnabled = false
 local espEnabled = false
@@ -63,6 +65,18 @@ local supplyColor = Color3.new(0,1,1)
 local supplySize = 16
 local supplyThick = 2
 
+local infoX = 10
+local infoY = 200
+local infoTrans = 0.7
+local infoBorderThick = 2
+local infoTextSize = 16
+local infoRainbow = false
+local infoStyle = "Modern"
+local infoTextColor = Color3.new(1,1,1)
+local infoBorderColor = Color3.new(1,0,0)
+local infoShowActive = true
+local infoCompact = false
+
 local scrapColors = {
     [1] = Color3.new(0.5,0.5,0.5),
     [2] = Color3.new(0,0.7,0),
@@ -70,6 +84,108 @@ local scrapColors = {
     [4] = Color3.new(0.7,0,1),
     [5] = Color3.new(1,0.8,0),
 }
+
+local function updateInfoPositions()
+    if not screenInfos.bg then return end
+    
+    local baseX, baseY = infoX, infoY
+    screenInfos.bg.Position = Vector2.new(baseX, baseY)
+    screenInfos.border.Position = Vector2.new(baseX, baseY)
+    
+    if infoStyle == "Modern" then
+        screenInfos.title.Position = Vector2.new(baseX + 10, baseY + 5)
+        screenInfos.time.Position = Vector2.new(baseX + 10, baseY + 30)
+        screenInfos.power.Position = Vector2.new(baseX + 10, baseY + 50)
+        screenInfos.active.Position = Vector2.new(baseX + 10, baseY + 75)
+    elseif infoStyle == "Classic" then
+        local width = infoCompact and 150 or 200
+        screenInfos.title.Position = Vector2.new(baseX + width/2, baseY + 5)
+        screenInfos.title.Center = true
+        screenInfos.time.Position = Vector2.new(baseX + 10, baseY + 25)
+        screenInfos.power.Position = Vector2.new(baseX + 10, baseY + 45)
+        screenInfos.active.Position = Vector2.new(baseX + 10, baseY + 70)
+    elseif infoStyle == "Minimal" then
+        screenInfos.title.Visible = false
+        screenInfos.time.Position = Vector2.new(baseX + 5, baseY + 5)
+        screenInfos.power.Position = Vector2.new(baseX + 5, baseY + 25)
+        screenInfos.active.Position = Vector2.new(baseX + 5, baseY + 45)
+    elseif infoStyle == "Gaming" then
+        local width = infoCompact and 150 or 200
+        screenInfos.title.Position = Vector2.new(baseX + width/2, baseY + 5)
+        screenInfos.title.Center = true
+        screenInfos.time.Position = Vector2.new(baseX + 15, baseY + 35)
+        screenInfos.power.Position = Vector2.new(baseX + 15, baseY + 60)
+        screenInfos.active.Position = Vector2.new(baseX + 15, baseY + 90)
+    end
+end
+
+local function updateInfoTextSizes()
+    if not screenInfos.title then return end
+    
+    screenInfos.title.Size = infoTextSize + 2
+    screenInfos.time.Size = infoTextSize
+    screenInfos.power.Size = infoTextSize
+    screenInfos.active.Size = infoTextSize - 2
+end
+
+local function updateInfoColors()
+    if not screenInfos.title then return end
+    
+    screenInfos.time.Color = infoTextColor
+    screenInfos.power.Color = infoTextColor
+end
+
+local function createScrapESP(model)
+    if scrapESP[model] then return end
+    
+    local esp = {}
+    esp.box = draw("Square")
+    esp.box.Thickness = 1
+    esp.box.Filled = false
+    esp.box.Visible = false
+    
+    esp.text = draw("Text")
+    esp.text.Size = 14
+    esp.text.Center = true
+    esp.text.Outline = true
+    esp.text.Visible = false
+    
+    esp.dist = draw("Text")
+    esp.dist.Size = 12
+    esp.dist.Center = true
+    esp.dist.Outline = true
+    esp.dist.Visible = false
+    
+    scrapESP[model] = esp
+end
+
+local function createSupplyESP(model)
+    if supplyESP[model] then return end
+    
+    local esp = {}
+    esp.box = draw("Square")
+    esp.box.Thickness = supplyThick
+    esp.box.Filled = false
+    esp.box.Visible = false
+    esp.box.Color = supplyColor
+    
+    esp.text = draw("Text")
+    esp.text.Size = supplySize
+    esp.text.Center = true
+    esp.text.Outline = true
+    esp.text.Visible = false
+    esp.text.Color = supplyColor
+    esp.text.Text = "SUPPLY BOX"
+    
+    esp.dist = draw("Text")
+    esp.dist.Size = 14
+    esp.dist.Center = true
+    esp.dist.Outline = true
+    esp.dist.Visible = false
+    esp.dist.Color = Color3.new(1,1,1)
+    
+    supplyESP[model] = esp
+end
 
 local Window = Rayfield:CreateWindow({
    Name = "rake shit",
@@ -241,6 +357,23 @@ local PickupRangeSlider = MainTab:CreateSlider({
    end,
 })
 
+local ScreenInfoSection = MainTab:CreateSection("SCREEN INFO")
+
+local ScreenInfoToggle = MainTab:CreateToggle({
+   Name = "Show Screen Info",
+   CurrentValue = false,
+   Flag = "screeninfo",
+   Callback = function(v)
+      screenInfoEnabled = v
+      configValues.screeninfo = v
+      for _,info in pairs(screenInfos) do
+         if info.Visible ~= nil then
+            info.Visible = v
+         end
+      end
+   end,
+})
+
 local RakeSection = SettingsTab:CreateSection("RAKE")
 
 local ColorPicker = SettingsTab:CreateColorPicker({
@@ -371,8 +504,10 @@ local FlareColorPicker = SettingsTab:CreateColorPicker({
    Callback = function(v)
       flareColor = v
       configValues.flarecolor = {v.R * 255, v.G * 255, v.B * 255}
-      flareESP.box.Color = v
-      flareESP.text.Color = v
+      if flareESP.box then
+         flareESP.box.Color = v
+         flareESP.text.Color = v
+      end
    end
 })
 
@@ -386,7 +521,9 @@ local FlareSizeSlider = SettingsTab:CreateSlider({
    Callback = function(v)
       flareSize = v
       configValues.flaresize = v
-      flareESP.text.Size = v
+      if flareESP.text then
+         flareESP.text.Size = v
+      end
    end,
 })
 
@@ -400,7 +537,9 @@ local FlareThickSlider = SettingsTab:CreateSlider({
    Callback = function(v)
       flareThick = v
       configValues.flarethick = v
-      flareESP.box.Thickness = v
+      if flareESP.box then
+         flareESP.box.Thickness = v
+      end
    end,
 })
 
@@ -442,7 +581,150 @@ local SupplyThickSlider = SettingsTab:CreateSlider({
    end,
 })
 
--- Config Tab
+local ScreenInfoSection = SettingsTab:CreateSection("SCREEN INFO")
+
+local InfoStyleDropdown = SettingsTab:CreateDropdown({
+    Name = "Info Style",
+    Options = {"Modern", "Classic", "Minimal", "Gaming"},
+    CurrentOption = {"Modern"},
+    MultipleOptions = false,
+    Flag = "infostyle",
+    Callback = function(v)
+        infoStyle = v[1]
+        configValues.infostyle = v[1]
+        updateInfoPositions()
+    end,
+})
+
+local InfoXSlider = SettingsTab:CreateSlider({
+   Name = "Info X Position",
+   Range = {0, 1000},
+   Increment = 10,
+   Suffix = "px",
+   CurrentValue = 10,
+   Flag = "infox",
+   Callback = function(v)
+      infoX = v
+      configValues.infox = v
+      updateInfoPositions()
+   end,
+})
+
+local InfoYSlider = SettingsTab:CreateSlider({
+   Name = "Info Y Position",
+   Range = {0, 800},
+   Increment = 10,
+   Suffix = "px",
+   CurrentValue = 200,
+   Flag = "infoy",
+   Callback = function(v)
+      infoY = v
+      configValues.infoy = v
+      updateInfoPositions()
+   end,
+})
+
+local InfoTransSlider = SettingsTab:CreateSlider({
+   Name = "Background Transparency",
+   Range = {0, 1},
+   Increment = 0.1,
+   Suffix = "",
+   CurrentValue = 0.7,
+   Flag = "infotrans",
+   Callback = function(v)
+      infoTrans = v
+      configValues.infotrans = v
+      if screenInfos.bg then
+         screenInfos.bg.Transparency = v
+      end
+   end,
+})
+
+local InfoTextSizeSlider = SettingsTab:CreateSlider({
+   Name = "Info Text Size",
+   Range = {12, 24},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 16,
+   Flag = "infotextsize",
+   Callback = function(v)
+      infoTextSize = v
+      configValues.infotextsize = v
+      updateInfoTextSizes()
+   end,
+})
+
+local InfoBorderThickSlider = SettingsTab:CreateSlider({
+   Name = "Border Thickness",
+   Range = {1, 5},
+   Increment = 1,
+   Suffix = "px",
+   CurrentValue = 2,
+   Flag = "infoborderthick",
+   Callback = function(v)
+      infoBorderThick = v
+      configValues.infoborderthick = v
+      if screenInfos.border then
+         screenInfos.border.Thickness = v
+      end
+   end,
+})
+
+local InfoRainbowToggle = SettingsTab:CreateToggle({
+   Name = "Rainbow Border",
+   CurrentValue = false,
+   Flag = "inforainbow",
+   Callback = function(v)
+      infoRainbow = v
+      configValues.inforainbow = v
+   end,
+})
+
+local InfoTextColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Text Color",
+   Color = Color3.fromRGB(255, 255, 255),
+   Flag = "infotextcolor",
+   Callback = function(v)
+      infoTextColor = v
+      configValues.infotextcolor = {v.R * 255, v.G * 255, v.B * 255}
+      updateInfoColors()
+   end
+})
+
+local InfoBorderColorPicker = SettingsTab:CreateColorPicker({
+   Name = "Border Color",
+   Color = Color3.fromRGB(255, 0, 0),
+   Flag = "infobordercolor",
+   Callback = function(v)
+      infoBorderColor = v
+      configValues.infobordercolor = {v.R * 255, v.G * 255, v.B * 255}
+      if screenInfos.border and not infoRainbow then
+         screenInfos.border.Color = v
+      end
+   end
+})
+
+local InfoShowActiveToggle = SettingsTab:CreateToggle({
+   Name = "Show Active Systems",
+   CurrentValue = true,
+   Flag = "infoshowactive",
+   Callback = function(v)
+      infoShowActive = v
+      configValues.infoshowactive = v
+   end,
+})
+
+local InfoCompactToggle = SettingsTab:CreateToggle({
+   Name = "Compact Mode",
+   CurrentValue = false,
+   Flag = "infocompact",
+   Callback = function(v)
+      infoCompact = v
+      configValues.infocompact = v
+      updateInfoPositions()
+   end,
+})
+
 local configFolder = "RakeConfigs"
 local configs = {}
 local autoLoadConfig = nil
@@ -464,7 +746,65 @@ if not isfolder(configFolder) then
     makefolder(configFolder)
 end
 
--- check for autoload
+local function loadConfig(configName)
+    if isfile(configFolder.."/"..configName..".json") then
+        local data = game:GetService("HttpService"):JSONDecode(readfile(configFolder.."/"..configName..".json"))
+        
+        ESPToggle:Set(data.esp or false)
+        ScrapToggle:Set(data.scrapesp or false)
+        FlareToggle:Set(data.flareesp or false)
+        SupplyToggle:Set(data.supplyesp or false)
+        LightToggle:Set(data.light or false)
+        SprintToggle:Set(data.sprint or false)
+        CamToggle:Set(data.cam or false)
+        AutoPickupToggle:Set(data.autopickup or false)
+        ScreenInfoToggle:Set(data.screeninfo or false)
+        BrightSlider:Set(data.bright or 1)
+        ZoomSlider:Set(data.zoom or 15)
+        PickupRangeSlider:Set(data.pickuprange or 10)
+        ThickSlider:Set(data.thick or 1)
+        TextSlider:Set(data.textsize or 15)
+        NameToggle:Set(data.showname ~= false)
+        DistToggle:Set(data.showdist ~= false)
+        TracerToggle:Set(data.tracer or false)
+        ScrapColorToggle:Set(data.scrapraritycolor ~= false)
+        ScrapSizeSlider:Set(data.scrapsize or 14)
+        ScrapThickSlider:Set(data.scrapthick or 1)
+        FlareSizeSlider:Set(data.flaresize or 16)
+        FlareThickSlider:Set(data.flarethick or 2)
+        SupplySizeSlider:Set(data.supplysize or 16)
+        SupplyThickSlider:Set(data.supplythick or 2)
+        InfoStyleDropdown:Set({data.infostyle or "Modern"})
+        InfoXSlider:Set(data.infox or 10)
+        InfoYSlider:Set(data.infoy or 200)
+        InfoTransSlider:Set(data.infotrans or 0.7)
+        InfoTextSizeSlider:Set(data.infotextsize or 16)
+        InfoBorderThickSlider:Set(data.infoborderthick or 2)
+        InfoRainbowToggle:Set(data.inforainbow or false)
+        InfoShowActiveToggle:Set(data.infoshowactive ~= false)
+        InfoCompactToggle:Set(data.infocompact or false)
+        
+        if data.espcolor then
+            ColorPicker:Set(Color3.fromRGB(data.espcolor[1], data.espcolor[2], data.espcolor[3]))
+        end
+        if data.scrapcolor then
+            ScrapColorPicker:Set(Color3.fromRGB(data.scrapcolor[1], data.scrapcolor[2], data.scrapcolor[3]))
+        end
+        if data.flarecolor then
+            FlareColorPicker:Set(Color3.fromRGB(data.flarecolor[1], data.flarecolor[2], data.flarecolor[3]))
+        end
+        if data.supplycolor then
+            SupplyColorPicker:Set(Color3.fromRGB(data.supplycolor[1], data.supplycolor[2], data.supplycolor[3]))
+        end
+        if data.infotextcolor then
+            InfoTextColorPicker:Set(Color3.fromRGB(data.infotextcolor[1], data.infotextcolor[2], data.infotextcolor[3]))
+        end
+        if data.infobordercolor then
+            InfoBorderColorPicker:Set(Color3.fromRGB(data.infobordercolor[1], data.infobordercolor[2], data.infobordercolor[3]))
+        end
+    end
+end
+
 if isfile(configFolder.."/autoload.txt") then
     autoLoadConfig = readfile(configFolder.."/autoload.txt")
 end
@@ -503,46 +843,7 @@ local SaveButton = ConfigTab:CreateButton({
 local LoadButton = ConfigTab:CreateButton({
     Name = "Load Config",
     Callback = function()
-        if isfile(configFolder.."/"..selectedConfig..".json") then
-            local data = game:GetService("HttpService"):JSONDecode(readfile(configFolder.."/"..selectedConfig..".json"))
-            
-            ESPToggle:Set(data.esp or false)
-            ScrapToggle:Set(data.scrapesp or false)
-            FlareToggle:Set(data.flareesp or false)
-            SupplyToggle:Set(data.supplyesp or false)
-            LightToggle:Set(data.light or false)
-            SprintToggle:Set(data.sprint or false)
-            CamToggle:Set(data.cam or false)
-            AutoPickupToggle:Set(data.autopickup or false)
-            BrightSlider:Set(data.bright or 1)
-            ZoomSlider:Set(data.zoom or 15)
-            PickupRangeSlider:Set(data.pickuprange or 10)
-            ThickSlider:Set(data.thick or 1)
-            TextSlider:Set(data.textsize or 15)
-            NameToggle:Set(data.showname ~= false)
-            DistToggle:Set(data.showdist ~= false)
-            TracerToggle:Set(data.tracer or false)
-            ScrapColorToggle:Set(data.scrapraritycolor ~= false)
-            ScrapSizeSlider:Set(data.scrapsize or 14)
-            ScrapThickSlider:Set(data.scrapthick or 1)
-            FlareSizeSlider:Set(data.flaresize or 16)
-            FlareThickSlider:Set(data.flarethick or 2)
-            SupplySizeSlider:Set(data.supplysize or 16)
-            SupplyThickSlider:Set(data.supplythick or 2)
-            
-            if data.espcolor then
-                ColorPicker:Set(Color3.fromRGB(data.espcolor[1], data.espcolor[2], data.espcolor[3]))
-            end
-            if data.scrapcolor then
-                ScrapColorPicker:Set(Color3.fromRGB(data.scrapcolor[1], data.scrapcolor[2], data.scrapcolor[3]))
-            end
-            if data.flarecolor then
-                FlareColorPicker:Set(Color3.fromRGB(data.flarecolor[1], data.flarecolor[2], data.flarecolor[3]))
-            end
-            if data.supplycolor then
-                SupplyColorPicker:Set(Color3.fromRGB(data.supplycolor[1], data.supplycolor[2], data.supplycolor[3]))
-            end
-        end
+        loadConfig(selectedConfig)
     end,
 })
 
@@ -591,58 +892,6 @@ local TowerLabel = InfoTab:CreateLabel("Tower Light: OFF")
 
 local ExperimentalLabel = ExperimentalTab:CreateLabel("Testing Features!")
 
-local function createScrapESP(model)
-    if scrapESP[model] then return end
-    
-    local esp = {}
-    esp.box = draw("Square")
-    esp.box.Thickness = 1
-    esp.box.Filled = false
-    esp.box.Visible = false
-    
-    esp.text = draw("Text")
-    esp.text.Size = 14
-    esp.text.Center = true
-    esp.text.Outline = true
-    esp.text.Visible = false
-    
-    esp.dist = draw("Text")
-    esp.dist.Size = 12
-    esp.dist.Center = true
-    esp.dist.Outline = true
-    esp.dist.Visible = false
-    
-    scrapESP[model] = esp
-end
-
-local function createSupplyESP(model)
-    if supplyESP[model] then return end
-    
-    local esp = {}
-    esp.box = draw("Square")
-    esp.box.Thickness = supplyThick
-    esp.box.Filled = false
-    esp.box.Visible = false
-    esp.box.Color = supplyColor
-    
-    esp.text = draw("Text")
-    esp.text.Size = supplySize
-    esp.text.Center = true
-    esp.text.Outline = true
-    esp.text.Visible = false
-    esp.text.Color = supplyColor
-    esp.text.Text = "SUPPLY BOX"
-    
-    esp.dist = draw("Text")
-    esp.dist.Size = 14
-    esp.dist.Center = true
-    esp.dist.Outline = true
-    esp.dist.Visible = false
-    esp.dist.Color = Color3.new(1,1,1)
-    
-    supplyESP[model] = esp
-end
-
 flareESP.box = draw("Square")
 flareESP.box.Thickness = 2
 flareESP.box.Filled = false
@@ -664,13 +913,67 @@ flareESP.dist.Outline = true
 flareESP.dist.Visible = false
 flareESP.dist.Color = Color3.new(1,1,1)
 
+screenInfos.bg = draw("Square")
+screenInfos.bg.Size = Vector2.new(200, 120)
+screenInfos.bg.Position = Vector2.new(10, 200)
+screenInfos.bg.Color = Color3.new(0, 0, 0)
+screenInfos.bg.Transparency = 0.7
+screenInfos.bg.Filled = true
+screenInfos.bg.Visible = false
+
+screenInfos.border = draw("Square")
+screenInfos.border.Size = Vector2.new(200, 120)
+screenInfos.border.Position = Vector2.new(10, 200)
+screenInfos.border.Color = Color3.new(1, 0, 0)
+screenInfos.border.Thickness = 2
+screenInfos.border.Filled = false
+screenInfos.border.Visible = false
+
+screenInfos.title = draw("Text")
+screenInfos.title.Text = "RAKE STATS"
+screenInfos.title.Size = 18
+screenInfos.title.Position = Vector2.new(20, 205)
+screenInfos.title.Color = Color3.new(1, 0, 0)
+screenInfos.title.Outline = true
+screenInfos.title.Visible = false
+
+screenInfos.time = draw("Text")
+screenInfos.time.Text = "TIME: 0:00"
+screenInfos.time.Size = 16
+screenInfos.time.Position = Vector2.new(20, 230)
+screenInfos.time.Color = Color3.new(1, 1, 1)
+screenInfos.time.Outline = true
+screenInfos.time.Visible = false
+
+screenInfos.power = draw("Text")
+screenInfos.power.Text = "ENERGY: 0%"
+screenInfos.power.Size = 16
+screenInfos.power.Position = Vector2.new(20, 250)
+screenInfos.power.Color = Color3.new(1, 1, 1)
+screenInfos.power.Outline = true
+screenInfos.power.Visible = false
+
+screenInfos.active = draw("Text")
+screenInfos.active.Text = ""
+screenInfos.active.Size = 14
+screenInfos.active.Position = Vector2.new(20, 275)
+screenInfos.active.Color = Color3.new(0, 1, 0)
+screenInfos.active.Outline = true
+screenInfos.active.Visible = false
+
 if autoLoadConfig and isfile(configFolder.."/"..autoLoadConfig..".json") then
     task.wait(0.5)
-    selectedConfig = autoLoadConfig
-    LoadButton.Callback()
+    loadConfig(autoLoadConfig)
 end
 
+local rainbowHue = 0
+
 rs.RenderStepped:Connect(function()
+    if infoRainbow and screenInfos.border then
+        rainbowHue = (rainbowHue + 0.005) % 1
+        screenInfos.border.Color = Color3.fromHSV(rainbowHue, 1, 1)
+    end
+    
     if lightEnabled then
         local l = game.Lighting
         l.Brightness = brightness
@@ -719,26 +1022,95 @@ rs.RenderStepped:Connect(function()
     if timer then
         local mins = math.floor(timer.Value / 60)
         local secs = timer.Value % 60
-        TimerLabel:Set(string.format("Time: %d:%02d", mins, secs))
+        local timeText = string.format("Time: %d:%02d", mins, secs)
+        TimerLabel:Set(timeText)
+        if screenInfoEnabled then
+            if infoCompact then
+                screenInfos.time.Text = string.format("%d:%02d", mins, secs)
+            else
+                screenInfos.time.Text = string.format("TIME: %d:%02d", mins, secs)
+            end
+        end
     end
     
     local power = repStorage:FindFirstChild("PowerValues")
     if power then
+        local activeList = {}
+        local activeCount = 0
+        
         if power:FindFirstChild("PowerLevel") then
-            PowerLabel:Set("Power: "..math.floor(power.PowerLevel.Value / 10).."%")
+            local powerPercent = math.floor(power.PowerLevel.Value / 10)
+            local powerText = "Power: "..powerPercent.."%"
+            PowerLabel:Set(powerText)
+            if screenInfoEnabled then
+                if infoCompact then
+                    screenInfos.power.Text = powerPercent.."%"
+                else
+                    screenInfos.power.Text = "ENERGY: "..powerPercent.."%"
+                end
+                if powerPercent <= 20 then
+                    screenInfos.power.Color = Color3.new(1, 0, 0)
+                elseif powerPercent <= 50 then
+                    screenInfos.power.Color = Color3.new(1, 1, 0)
+                else
+                    screenInfos.power.Color = Color3.new(0, 1, 0)
+                end
+            end
         end
-        if power:FindFirstChild("UsingSHDoor") then
-            DoorLabel:Set("SafeHouse Door: "..(power.UsingSHDoor.Value and "ON" or "OFF"))
+        
+        local doorOn = power:FindFirstChild("UsingSHDoor") and power.UsingSHDoor.Value
+        local lightOn = power:FindFirstChild("UsingSHLight") and power.UsingSHLight.Value
+        local towerOn = power:FindFirstChild("UsingTowerLight") and power.UsingTowerLight.Value
+        
+        if doorOn then
+            table.insert(activeList, infoCompact and "DOOR" or "SH DOOR: ON")
+            activeCount = activeCount + 1
         end
-        if power:FindFirstChild("UsingSHLight") then
-            SHLightLabel:Set("SafeHouse Light: "..(power.UsingSHLight.Value and "ON" or "OFF"))
+        if lightOn then
+            table.insert(activeList, infoCompact and "LIGHT" or "SH LIGHT: ON")
+            activeCount = activeCount + 1
         end
-        if power:FindFirstChild("UsingTowerLight") then
-            TowerLabel:Set("Tower Light: "..(power.UsingTowerLight.Value and "ON" or "OFF"))
+        if towerOn then
+            table.insert(activeList, infoCompact and "TOWER" or "TOWER: ON")
+            activeCount = activeCount + 1
+        end
+        
+        DoorLabel:Set("SafeHouse Door: "..(doorOn and "ON" or "OFF"))
+        SHLightLabel:Set("SafeHouse Light: "..(lightOn and "ON" or "OFF"))
+        TowerLabel:Set("Tower Light: "..(towerOn and "ON" or "OFF"))
+        
+        if screenInfoEnabled and infoShowActive then
+            if #activeList > 0 then
+                screenInfos.active.Text = table.concat(activeList, "\n")
+                screenInfos.active.Color = Color3.new(0, 1, 0)
+                screenInfos.active.Visible = true
+            else
+                screenInfos.active.Text = infoCompact and "NONE" or "NO ACTIVE SYSTEMS"
+                screenInfos.active.Color = Color3.new(0.5, 0.5, 0.5)
+                screenInfos.active.Visible = true
+            end
+            
+            local baseHeight = infoShowActive and (90 + (activeCount * 20)) or 70
+            if infoStyle == "Gaming" then
+                baseHeight = baseHeight + 20
+            elseif infoStyle == "Minimal" then
+                baseHeight = baseHeight - 20
+            end
+            
+            screenInfos.bg.Size = Vector2.new(infoCompact and 150 or 200, baseHeight)
+            screenInfos.border.Size = Vector2.new(infoCompact and 150 or 200, baseHeight)
         end
     end
     
     if scrapEnabled then
+        for model, esp in pairs(scrapESP) do
+            if not model.Parent then
+                esp.box.Visible = false
+                esp.text.Visible = false
+                esp.dist.Visible = false
+            end
+        end
+        
         local filter = workspace:FindFirstChild("Filter")
         if filter then
             local spawns = filter:FindFirstChild("ScrapSpawns")
@@ -799,6 +1171,12 @@ rs.RenderStepped:Connect(function()
                 end
             end
         end
+    else
+        for _,esp in pairs(scrapESP) do
+            esp.box.Visible = false
+            esp.text.Visible = false
+            esp.dist.Visible = false
+        end
     end
     
     if flareEnabled then
@@ -811,14 +1189,14 @@ rs.RenderStepped:Connect(function()
                     local size = 1800 / pos.Z
                     flareESP.box.Size = Vector2.new(size, size)
                     flareESP.box.Position = Vector2.new(pos.X - size/2, pos.Y - size/2)
-                    flareESP.box.Visible = true
                     flareESP.box.Thickness = flareThick
                     flareESP.box.Color = flareColor
+                    flareESP.box.Visible = true
                     
                     flareESP.text.Position = Vector2.new(pos.X, pos.Y + size/2 + 5)
-                    flareESP.text.Visible = true
                     flareESP.text.Size = flareSize
                     flareESP.text.Color = flareColor
+                    flareESP.text.Visible = true
                     
                     flareESP.dist.Position = Vector2.new(pos.X, pos.Y + size/2 + 5 + flareSize + 2)
                     flareESP.dist.Text = math.floor((plr.Character.HumanoidRootPart.Position - flareGun.Position).Magnitude).."m"
@@ -833,10 +1211,26 @@ rs.RenderStepped:Connect(function()
                 flareESP.text.Visible = false
                 flareESP.dist.Visible = false
             end
+        else
+            flareESP.box.Visible = false
+            flareESP.text.Visible = false
+            flareESP.dist.Visible = false
         end
+    else
+        flareESP.box.Visible = false
+        flareESP.text.Visible = false
+        flareESP.dist.Visible = false
     end
 
     if supplyEnabled then
+        for model, esp in pairs(supplyESP) do
+            if not model.Parent then
+                esp.box.Visible = false
+                esp.text.Visible = false
+                esp.dist.Visible = false
+            end
+        end
+        
         local debris = workspace:FindFirstChild("Debris")
         if debris then
             local crates = debris:FindFirstChild("SupplyCrates")
@@ -874,6 +1268,12 @@ rs.RenderStepped:Connect(function()
                     end
                 end
             end
+        end
+    else
+        for _,esp in pairs(supplyESP) do
+            esp.box.Visible = false
+            esp.text.Visible = false
+            esp.dist.Visible = false
         end
     end
     
@@ -933,5 +1333,27 @@ workspace.DescendantRemoving:Connect(function(obj)
         supplyESP[obj].text:Remove()
         supplyESP[obj].dist:Remove()
         supplyESP[obj] = nil
+    end
+end)
+
+task.spawn(function()
+    while task.wait(5) do
+        for model, esp in pairs(scrapESP) do
+            if not model.Parent then
+                esp.box:Remove()
+                esp.text:Remove()
+                esp.dist:Remove()
+                scrapESP[model] = nil
+            end
+        end
+        
+        for model, esp in pairs(supplyESP) do
+            if not model.Parent then
+                esp.box:Remove()
+                esp.text:Remove()
+                esp.dist:Remove()
+                supplyESP[model] = nil
+            end
+        end
     end
 end)
